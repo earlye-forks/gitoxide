@@ -16,6 +16,13 @@ There are two primary ways to use `gitoxide`:
 
 [`gix`]: https://docs.rs/gix
 
+## About This Fork
+
+This repository is a fork of [GitoxideLabs/gitoxide](https://github.com/GitoxideLabs/gitoxide). It carries a set
+of security and correctness fixes applied on top of upstream, tracked as prompts rather than as a diverging code
+history. Anyone re-mirroring this fork from a newer upstream release should look at the fork's NQAF prompt history
+to see which fixes need to be reapplied.
+
 ## Development Status
 
 The command-line tools as well as the status of each crate is described in
