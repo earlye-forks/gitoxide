@@ -3,6 +3,7 @@ use std::{
     io::{Read, Write},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use gix_features::io::pipe;
@@ -58,54 +59,10 @@ impl Default for Remote {
             let redirect_action = Arc::new(Mutex::new(RedirectAction::Stop));
             let redirect_tail = Arc::new(Mutex::new(String::new()));
 
-            // We may error while configuring, which is expected as part of the internal protocol. The error will be
-            // received and the sender of the request might restart us.
-            let client = reqwest::blocking::ClientBuilder::new()
-                .connect_timeout(std::time::Duration::from_secs(20))
-                .http1_title_case_headers()
-                .redirect(reqwest::redirect::Policy::custom({
-                    let redirect_action = redirect_action.clone();
-                    let redirect_tail = redirect_tail.clone();
-                    move |attempt| {
-                        match *redirect_action.lock() {
-                            RedirectAction::Follow => {
-                                let curr_url = attempt.url();
-                                let prev_urls = attempt.previous();
-                                // emulate default git behaviour which relies on curl default behaviour apparently.
-                                const CURL_DEFAULT_REDIRS: usize = 50;
-                                if prev_urls.len() >= CURL_DEFAULT_REDIRS {
-                                    return attempt.error("too many redirects");
-                                }
-
-                                match prev_urls.last() {
-                                    Some(prev_url) if !redirect::scheme_is_safe(curr_url.as_str(), prev_url.as_str()) => {
-                                        // Don't follow insecure protocol redirects, particularly https-to-http downgrades.
-                                        attempt.stop()
-                                    }
-                                    Some(prev_url) if authority_changed(curr_url, prev_url) => {
-                                        // Allowed only if the tail doesn't change.
-                                        let redirect_tail = redirect_tail.lock();
-                                        if curr_url.as_str().ends_with(redirect_tail.as_str()) {
-                                            attempt.follow()
-                                        } else {
-                                            let curr_url = curr_url.as_str().to_owned();
-                                            let redirect_tail = redirect_tail.to_string();
-                                            attempt.error(format!(
-                                                "redirect url {curr_url:?} does not end with expected request suffix {redirect_tail:?}",
-                                            ))
-                                        }
-                                    }
-                                    _ => attempt.follow(),
-                                }
-                            }
-                            RedirectAction::RejectConfiguredHeaders => {
-                                attempt.error("refusing to follow redirect after request headers were configured")
-                            }
-                            RedirectAction::Stop => attempt.stop(),
-                        }
-                    }
-                }))
-                .build()?;
+            // The client is built lazily, and rebuilt whenever the configured timeouts change, as they can only be
+            // set at client-construction time and aren't known until the first (or a reconfigured) request arrives.
+            let mut client: Option<reqwest::blocking::Client> = None;
+            let mut client_timeouts: Option<(Duration, Option<Duration>)> = None;
 
             for Request {
                 url,
@@ -115,6 +72,64 @@ impl Default for Remote {
                 config,
             } in req_recv
             {
+                let connect_timeout = config.connect_timeout.unwrap_or(Duration::from_secs(20));
+                let read_timeout = config.read_timeout;
+                if client_timeouts != Some((connect_timeout, read_timeout)) {
+                    // We may error while configuring, which is expected as part of the internal protocol. The error will be
+                    // received and the sender of the request might restart us.
+                    let mut builder = reqwest::blocking::ClientBuilder::new()
+                        .connect_timeout(connect_timeout)
+                        .http1_title_case_headers()
+                        .redirect(reqwest::redirect::Policy::custom({
+                            let redirect_action = redirect_action.clone();
+                            let redirect_tail = redirect_tail.clone();
+                            move |attempt| {
+                                match *redirect_action.lock() {
+                                    RedirectAction::Follow => {
+                                        let curr_url = attempt.url();
+                                        let prev_urls = attempt.previous();
+                                        // emulate default git behaviour which relies on curl default behaviour apparently.
+                                        const CURL_DEFAULT_REDIRS: usize = 50;
+                                        if prev_urls.len() >= CURL_DEFAULT_REDIRS {
+                                            return attempt.error("too many redirects");
+                                        }
+
+                                        match prev_urls.last() {
+                                            Some(prev_url) if !redirect::scheme_is_safe(curr_url.as_str(), prev_url.as_str()) => {
+                                                // Don't follow insecure protocol redirects, particularly https-to-http downgrades.
+                                                attempt.stop()
+                                            }
+                                            Some(prev_url) if authority_changed(curr_url, prev_url) => {
+                                                // Allowed only if the tail doesn't change.
+                                                let redirect_tail = redirect_tail.lock();
+                                                if curr_url.as_str().ends_with(redirect_tail.as_str()) {
+                                                    attempt.follow()
+                                                } else {
+                                                    let curr_url = curr_url.as_str().to_owned();
+                                                    let redirect_tail = redirect_tail.to_string();
+                                                    attempt.error(format!(
+                                                        "redirect url {curr_url:?} does not end with expected request suffix {redirect_tail:?}",
+                                                    ))
+                                                }
+                                            }
+                                            _ => attempt.follow(),
+                                        }
+                                    }
+                                    RedirectAction::RejectConfiguredHeaders => {
+                                        attempt.error("refusing to follow redirect after request headers were configured")
+                                    }
+                                    RedirectAction::Stop => attempt.stop(),
+                                }
+                            }
+                        }));
+                    if let Some(read_timeout) = read_timeout {
+                        builder = builder.timeout(read_timeout);
+                    }
+                    client = Some(builder.build()?);
+                    client_timeouts = Some((connect_timeout, read_timeout));
+                }
+                let client = client.as_ref().expect("just built or already present");
+
                 let redirected_base_url = redirected_base_url_shared.lock().clone();
                 let effective_url = redirect::swap_tails(redirected_base_url.as_deref(), &base_url, url.clone());
                 let has_configured_extra_headers = !config.extra_headers.is_empty();

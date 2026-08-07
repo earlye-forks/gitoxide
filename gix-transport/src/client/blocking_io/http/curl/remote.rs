@@ -339,6 +339,7 @@ pub fn new() -> Worker {
                     low_speed_limit_bytes_per_second,
                     low_speed_time_seconds,
                     connect_timeout,
+                    read_timeout: _,
                     proxy,
                     no_proxy,
                     proxy_auth_method,

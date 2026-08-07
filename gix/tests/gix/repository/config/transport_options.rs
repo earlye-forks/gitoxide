@@ -52,6 +52,7 @@ mod http {
             proxy_authenticate,
             user_agent,
             connect_timeout,
+            read_timeout,
             verbose,
             ssl_ca_info,
             ssl_version,
@@ -75,6 +76,7 @@ mod http {
         assert_eq!(proxy_auth_method, ProxyAuthMethod::Basic);
         assert_eq!(user_agent.as_deref(), Some("agentJustForHttp"));
         assert_eq!(connect_timeout, Some(std::time::Duration::from_millis(60 * 1024)));
+        assert_eq!(read_timeout, None, "not yet wired to a git-config key");
         assert_eq!(no_proxy, None);
         assert!(!verbose, "verbose is disabled by default");
         assert_eq!(ssl_ca_info.as_deref(), Some(std::path::Path::new("./CA.pem")));
