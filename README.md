@@ -5,6 +5,25 @@
 `gitoxide` is an implementation of `git` written in Rust for developing future-proof applications which strive for correctness and
 performance while providing a pleasant and unsurprising developer experience.
 
+## About This Fork
+
+This repository is a fork of [GitoxideLabs/gitoxide](https://github.com/GitoxideLabs/gitoxide). It carries a set of
+security and correctness fixes applied on top of upstream, tracked as prompts rather than as a diverging code
+history. Anyone re-mirroring this fork from a newer upstream release should look at the fork's NQAF prompt history
+to find the fixes that need to be reapplied.
+
+### Fork Features
+
+* **HTTP client timeouts (`reqwest` backend)**: `gix_transport::client::blocking_io::http::Options` gained a
+  `read_timeout` field, and its existing `connect_timeout` field is now honored by the `reqwest` HTTP backend, not
+  just the `curl` one. Without these, a request that stalls after connecting (e.g. a partitioned network or a
+  slow/malicious server) could block the calling thread indefinitely when using the `reqwest` backend.
+  * `connect_timeout` bounds how long to wait for the connection to be established (`gitoxide.http.connectTimeout`),
+    defaulting to 20 seconds if unset.
+  * `read_timeout` bounds the entire request, including reading the response body, and is unset (no timeout) by
+    default. It is honored by both the `reqwest` and `curl` backends, but is not yet backed by a `git` or
+    `gitoxide` configuration key.
+
 There are two primary ways to use `gitoxide`:
 
 1. **As Rust library**: Use the [`gix`](https://docs.rs/gix) crate as a Cargo dependency for API access.

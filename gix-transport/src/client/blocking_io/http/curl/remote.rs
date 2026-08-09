@@ -339,6 +339,7 @@ pub fn new() -> Worker {
                     low_speed_limit_bytes_per_second,
                     low_speed_time_seconds,
                     connect_timeout,
+                    read_timeout,
                     proxy,
                     no_proxy,
                     proxy_auth_method,
@@ -435,6 +436,9 @@ pub fn new() -> Worker {
             handle.transfer_encoding(false)?;
             if let Some(timeout) = connect_timeout {
                 handle.connect_timeout(timeout)?;
+            }
+            if let Some(timeout) = read_timeout {
+                handle.timeout(timeout)?;
             }
             {
                 let mut auth = Auth::new();
