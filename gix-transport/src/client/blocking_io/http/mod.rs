@@ -168,6 +168,12 @@ pub struct Options {
     /// If `None`, this typically defaults to 2 minutes to 5 minutes.
     /// Refers to `gitoxide.http.connectTimeout`.
     pub connect_timeout: Option<std::time::Duration>,
+    /// The amount of time to wait for an entire request - including reading the response body - to complete
+    /// before aborting it, bounding connections that stall after a successful connect.
+    ///
+    /// If `None`, no such timeout is enforced. This is a `gitoxide` fork addition and is not yet backed by a
+    /// `git` or `gitoxide` configuration key.
+    pub read_timeout: Option<std::time::Duration>,
     /// If enabled, emit additional information about connections and possibly the data received or written.
     pub verbose: bool,
     /// If set, use this path to point to a file with CA certificates to verify peers.
@@ -197,6 +203,7 @@ impl Default for Options {
             proxy_authenticate: None,
             user_agent: None,
             connect_timeout: None,
+            read_timeout: None,
             verbose: false,
             ssl_ca_info: None,
             ssl_version: None,
