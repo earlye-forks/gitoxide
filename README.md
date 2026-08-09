@@ -5,6 +5,13 @@
 `gitoxide` is an implementation of `git` written in Rust for developing future-proof applications which strive for correctness and
 performance while providing a pleasant and unsurprising developer experience.
 
+## About This Fork
+
+This repository is a fork of [GitoxideLabs/gitoxide](https://github.com/GitoxideLabs/gitoxide). It carries a set of
+security and correctness fixes applied on top of upstream, tracked as prompts rather than as a diverging code
+history. Anyone re-mirroring this fork from a newer upstream release should look at the fork's NQAF prompt history
+to find the fixes that need to be reapplied.
+
 There are two primary ways to use `gitoxide`:
 
 1. **As Rust library**: Use the [`gix`](https://docs.rs/gix) crate as a Cargo dependency for API access.
