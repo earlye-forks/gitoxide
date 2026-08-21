@@ -2,7 +2,7 @@
 #[derive(Debug, thiserror::Error)]
 #[expect(missing_docs)]
 pub enum Error {
-    #[error("Could not decode server reply")]
+    #[error("Could not decode server reply: {0}")]
     FetchResponse(#[from] crate::fetch::response::Error),
     #[error(transparent)]
     Negotiate(#[from] crate::fetch::negotiate::Error),
