@@ -393,6 +393,23 @@ mod v2 {
         #[crate::bisync::bisync]
         #[cfg_attr(feature = "blocking-client", test)]
         #[cfg_attr(all(feature = "async-client", not(feature = "blocking-client")), async_std::test)]
+        async fn fetch_with_err_response_surfaces_server_reason_in_top_level_error() {
+            let mut provider = mock_reader("v2/fetch-err-line.response");
+            provider.fail_on_err_lines(true);
+            let mut sidebands = provider.as_read_without_sidebands();
+            let err = fetch::Response::from_line_reader(Protocol::V2, &mut sidebands, true, true)
+                .await
+                .expect_err("need error response");
+            let err = fetch::Error::from(err);
+            assert!(
+                err.to_string().contains("segmentation fault"),
+                "the top-level error should retain the server's message, got: {err}"
+            );
+        }
+
+        #[crate::bisync::bisync]
+        #[cfg_attr(feature = "blocking-client", test)]
+        #[cfg_attr(all(feature = "async-client", not(feature = "blocking-client")), async_std::test)]
         async fn fetch_acks_and_pack() -> crate::Result {
             let mut provider = mock_reader("v2/fetch.response");
             let mut reader = provider.as_read_without_sidebands();
