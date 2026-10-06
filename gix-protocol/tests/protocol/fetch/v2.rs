@@ -156,6 +156,90 @@ async fn ls_remote_abort_in_prep_ls_refs() -> Result {
     Ok(())
 }
 
+/// A stand-in for the negotiation algorithm that wants a single object and is done after one round,
+/// so the server's reply to the `fetch` command is read right away.
+struct WantOneObject;
+
+impl gix_protocol::fetch::Negotiate for WantOneObject {
+    fn mark_complete_and_common_ref(&mut self) -> gix_error::Result<gix_protocol::fetch::negotiate::Action> {
+        Ok(gix_protocol::fetch::negotiate::Action::MustNegotiate {
+            remote_ref_target_known: vec![false],
+        })
+    }
+
+    fn add_wants(&mut self, arguments: &mut gix_protocol::fetch::Arguments, _remote_ref_target_known: &[bool]) -> bool {
+        arguments.want(oid("808e50d724f604f69ab93c6da2919c014667bedb"));
+        true
+    }
+
+    fn one_round(
+        &mut self,
+        _state: &mut gix_protocol::fetch::negotiate::one_round::State,
+        _arguments: &mut gix_protocol::fetch::Arguments,
+        _previous_response: Option<&gix_protocol::fetch::Response>,
+    ) -> gix_error::Result<(gix_protocol::fetch::negotiate::Round, bool)> {
+        Ok((
+            gix_protocol::fetch::negotiate::Round {
+                haves_sent: 0,
+                in_vain: 0,
+                haves_to_send: 0,
+                previous_response_had_at_least_one_in_common: false,
+            },
+            true,
+        ))
+    }
+}
+
+#[crate::bisync::bisync]
+#[cfg_attr(feature = "blocking-client", test)]
+#[cfg_attr(all(feature = "async-client", not(feature = "blocking-client")), async_std::test)]
+async fn fetch_with_err_response_surfaces_server_reason_in_top_level_error() -> Result {
+    let mut transport = transport(
+        Vec::new(),
+        "v2/handshake-then-fetch-err-line.response",
+        Protocol::V2,
+        gix_transport::client::git::ConnectMode::Daemon,
+    );
+    let mut handshake = gix_protocol::handshake(
+        &mut transport,
+        gix_transport::Service::UploadPack,
+        helper_unused,
+        Vec::new(),
+        &mut progress::Discard,
+    )
+    .await?;
+    let err = gix_protocol::fetch(
+        &mut WantOneObject,
+        |_pack, _progress, _should_interrupt| unreachable!("the server sends no pack"),
+        progress::Discard,
+        &std::sync::atomic::AtomicBool::default(),
+        gix_protocol::fetch::Context {
+            handshake: &mut handshake,
+            transport: &mut transport,
+            user_agent: ("agent", Some(gix_protocol::agent("agent"))),
+            trace_packetlines: false,
+        },
+        gix_protocol::fetch::Options {
+            shallow_file: "does-not-matter".into(),
+            shallow: &Default::default(),
+            tags: Default::default(),
+            reject_shallow_remote: false,
+        },
+    )
+    .await
+    .expect_err("the server answers the fetch request with an ERR line");
+    assert!(
+        err.to_string().contains("segmentation fault"),
+        "the top-level error should retain the server's message, got: {err}"
+    );
+    assert!(
+        err.downcast_any_ref::<gix_transport::packetline::read::Error>()
+            .is_some(),
+        "the remote ERR packet is still retained in the error chain: {err:?}"
+    );
+    Ok(())
+}
+
 #[crate::bisync::bisync]
 #[cfg_attr(feature = "blocking-client", test)]
 #[cfg_attr(all(feature = "async-client", not(feature = "blocking-client")), async_std::test)]
