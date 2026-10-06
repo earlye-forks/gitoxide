@@ -23,6 +23,11 @@ to find the fixes that need to be reapplied.
   * `read_timeout` bounds the entire request, including reading the response body, and is unset (no timeout) by
     default. It is honored by both the `reqwest` and `curl` backends, but is not yet backed by a `git` or
     `gitoxide` configuration key.
+* **Fetch errors carry the real server-provided reason**: `gix_protocol::fetch()` used to report a failure to read the
+  server's reply to the `fetch` command with a fixed `"Could not decode server reply"` message, hiding whatever detail
+  the server actually sent (e.g. the text of an `ERR` line when a remote rejects a `want` for a commit it doesn't
+  advertise) unless the caller walked the error chain. Its `Display` now appends that detail, while the original
+  error remains in the chain.
 
 There are two primary ways to use `gitoxide`:
 

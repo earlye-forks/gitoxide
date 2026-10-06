@@ -3,7 +3,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use gix_error::{Result, ResultExt, bail, message, validation};
+use gix_error::{ErrorExt, Result, ResultExt, bail, message, validation};
 use gix_features::progress::DynNestedProgress;
 
 use crate::fetch::{
@@ -129,7 +129,10 @@ where
                 let response =
                     crate::fetch::Response::from_line_reader(protocol_version, &mut reader, is_done, !is_done)
                         .await
-                        .or_raise(|| message("Could not decode server reply"))?;
+                        .map_err(|err| {
+                            let reason = message!("Could not decode server reply: {}", err.probable_cause());
+                            err.and_raise(reason)
+                        })?;
                 let has_pack = response.has_pack();
                 previous_response = Some(response);
                 if has_pack {
